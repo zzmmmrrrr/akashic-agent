@@ -1,5 +1,54 @@
 {
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-3c3676d2438b49a8a622cf030f6616b9",
+    "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+    "ANTHROPIC_MODEL": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Git",
+      "Npm",
+      "Pip",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Rm",
+      "Ssh",
+      "Sud"
+    ],
+    "initialPermissionMode": "acceptEdits"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "cols=$(stty size 2>/dev/null | awk '{print }'); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -1d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1); exec \"/c/Program Files/nodejs/node\" \"${plugin_dir}dist/index.js\""
+  },
   "enabledPlugins": {
-    "codex@openai-codex": true
-  }
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "claude-hud@claude-hud": true
+  },
+  "extraKnownMarketplaces": {
+    "anthropic-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/skills"
+      }
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    }
+  },
+  "effortLevel": "medium"
 }

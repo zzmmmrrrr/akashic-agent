@@ -12,7 +12,7 @@ services:
       - TZ=Asia/Shanghai
       - NAPCAT_UID=1000
       - NAPCAT_GID=1000
-      - ACCOUNT=1666567690
+      - ACCOUNT=2506026140
     volumes:
       - ./napcat-entrypoint.custom.sh:/app/entrypoint.sh:ro
       - ~/.config/QQ:/app/.config/QQ

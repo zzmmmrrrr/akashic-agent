@@ -144,6 +144,7 @@ class QQChannel:
         ncatbot_config.check_ncatbot_update = False
         ncatbot_config.skip_ncatbot_install_check = True
         ncatbot_config.napcat.remote_mode = True
+        ncatbot_config.napcat.enable_webui = False
         ncatbot_config.enable_webui_interaction = False
         # 运行时产物重定向到 ~/.akashic/ncatbot/，不污染项目目录
         _NCATBOT_DIR.mkdir(parents=True, exist_ok=True)
