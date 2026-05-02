@@ -98,7 +98,7 @@ class McpClientPool:
     def __init__(self, workspace: Path | None = None) -> None:
         self._workspace = workspace or _DEFAULT_WORKSPACE
         self._clients: dict[str, Any] = {}               # server -> McpClient
-        self._configs: dict[str, tuple[list, dict]] = {}  # server -> (command, env)
+        self._configs: dict[str, tuple[list, dict, str | None]] = {}  # server -> (command, env, cwd)
         self._locks: dict[str, asyncio.Lock] = {}         # server -> per-server lock（MCP stdio 不支持并发调用）
 
     async def connect_all(self) -> None:
@@ -114,19 +114,21 @@ class McpClientPool:
                 continue
             command = cfg.get("command", [])
             env = cfg.get("env") or {}
+            cwd = cfg.get("cwd") or None
             if not command:
                 continue
-            self._configs[server] = (command, env)
+            self._configs[server] = (command, env, cwd)
             await self._connect(server)
 
     async def _connect(self, server: str) -> bool:
         from agent.mcp.client import McpClient
 
-        command, env = self._configs.get(server, ([], {}))
+        cfg = self._configs.get(server, ([], {}, None))
+        command, env, cwd = cfg if len(cfg) == 3 else (cfg[0], cfg[1], None)
         if not command:
             return False
         try:
-            client = McpClient(name=server, command=command, env=env)
+            client = McpClient(name=server, command=command, env=env, cwd=cwd)
             await client.connect()
             self._clients[server] = client
             logger.info("[mcp_pool] connected: %s", server)

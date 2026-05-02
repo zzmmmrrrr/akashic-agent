@@ -33,20 +33,13 @@
   "enabledPlugins": {
     "claude-md-management@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
-    "claude-hud@claude-hud": true
+    "skill-creator@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "anthropic-agent-skills": {
       "source": {
         "source": "github",
         "repo": "anthropics/skills"
-      }
-    },
-    "claude-hud": {
-      "source": {
-        "source": "github",
-        "repo": "jarrodwatts/claude-hud"
       }
     }
   },
