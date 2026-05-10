@@ -15,6 +15,18 @@ class GateDecision:
 
 
 class QueryRewriter:
+    """轻量级记忆检索 Gate，使用独立小模型（如 Qwen-Flash）做查询改写与检索决策。
+
+    五层处理全部通过 _build_prompt 注入给 LLM，由 LLM 一次性完成推理并输出 XML，
+    代码侧只负责构造 prompt、调用 LLM、解析 XML。五层在 prompt 中的位置：
+
+    第一层 Gate 决策   — _parse_output 提取 <decision>，决定 RETRIEVE / NO_RETRIEVE
+    第二层 代词消解     — prompt L122-126：消解"他/她/它/这个/那个/这玩意"等指示词
+    第三层 隐式意图推断 — prompt L128-134：<thinking> 推断快递/身体/任务等隐含背景
+    第四层 元问题处理   — prompt L136-142：改写"你忘了吗/你还记得吗"为事实查询
+    第五层 聚合类问题   — prompt L116-120：改写"都有哪些/一共/总共"为宽泛语义查询
+    """
+
     def __init__(
         self,
         llm_client: Any,
@@ -29,6 +41,11 @@ class QueryRewriter:
         self._timeout_s = max(0.1, float(timeout_ms) / 1000.0)
 
     async def decide(self, user_msg: str, recent_history: str) -> GateDecision:
+        """主入口：构造 prompt → 调 LLM（含超时保护）→ 解析 XML → 返回 GateDecision。
+
+        fail-open 策略：LLM 超时、异常、或 XML 解析失败时，回退为 needs_episodic=True
+        且 episodic_query=原始消息，确保不因 Gate 故障而漏检记忆。
+        """
         # 1. 先准备 prompt 和 fail-open 默认值。
         started = time.perf_counter()
         fallback = self._build_decision(
@@ -65,6 +82,11 @@ class QueryRewriter:
         return str(content or "")
 
     def _parse_output(self, raw_output: str) -> dict[str, Any] | None:
+        """第一层 Gate 决策：从 LLM 输出的 XML 中提取 <decision> 和 <history_query>。
+
+        仅当 <decision> 为 RETRIEVE 或 NO_RETRIEVE 时返回有效结果，否则返回 None
+        触发上游 fail-open（回退原始消息走检索）。
+        """
         decision_text = self._extract_tag(raw_output, "decision").upper()
         if decision_text not in {"RETRIEVE", "NO_RETRIEVE"}:
             return None
@@ -100,6 +122,11 @@ class QueryRewriter:
 
     @staticmethod
     def _build_prompt(*, user_msg: str, recent_history: str) -> str:
+        """构造注入给 LLM 的系统 prompt，包含第二到第五层处理规则。
+
+        所有规则以中文直接写入 prompt，LLM 在一次推理中完成全部五层处理。
+        各层对应关系见类 docstring。
+        """
         history_block = recent_history.strip() or "（无）"
         return f"""你是记忆检索决策器。根据近期对话和当前用户消息，判断是否需要检索 episodic memory，并输出一个查询。
 
@@ -113,19 +140,19 @@ class QueryRewriter:
 - NO_RETRIEVE：打招呼、闲聊、确认当前轮内容、通用知识问答、简单回应”好/嗯/继续”
 - RETRIEVE：询问过去发生的事、用户偏好、个人信息，或要求执行某类操作时需要查 memory
 
-聚合类问题处理（包含”都有哪些/列举/所有/一共/总共/历史上”等词）：
+第五层 聚合类问题处理（包含”都有哪些/列举/所有/一共/总共/历史上”等词）：
 - 判断为 RETRIEVE
 - history_query 改写为宽泛的语义 query，覆盖该主题下所有可能的记录
   例：用户问”我买过哪些键盘” → history_query: “购买 键盘 外设”
   例：用户问”我们讨论过哪些游戏” → history_query: “游戏 推荐 讨论”
 
-代词消解（优先执行，再做其他推断）：
+第二层 代词消解（优先执行，再做其他推断）：
 - 消息中出现”他 / 她 / 它 / 这个 / 那个 / 这玩意 / 这东西 / 这 / 那”等指示词时，必须根据近期对话将其替换为实际指代的实体名称
 - 例：近期讨论了 “recursive language model”，用户说”他会经常返回奇怪的 repl 字符” → history_query: “recursive language model repl 字符 输出异常”
 - 例：近期讨论了 MCP 协议，用户说”这玩意为啥突然又火了” → history_query: “MCP 协议 突然流行 原因”
 - 若实在无法确定指代，保留原词并追加近期对话中最相关的实体词
 
-隐式意图推断（先想再决策）：
+第三层 隐式意图推断（先想再决策）：
 - 在输出 XML 之前，先用 <thinking>...</thinking> 推断用户消息的隐含背景
 - 提到快递 / 物流 / 单号 / 包裹 / 到货：隐含意图通常是查用户最近的购买行为
 - 提到身体症状 / 药 / 复查：隐含意图通常是查用户健康档案
@@ -133,7 +160,7 @@ class QueryRewriter:
 - 如果隐含意图指向历史记录，则应 RETRIEVE，history_query 应面向隐含意图，而不是表面词
 - <thinking> 只用于内部推理，不要把它混入最终 XML 字段
 
-元问题处理（用户在问 agent 是否记得某件事）：
+第四层 元问题处理（用户在问 agent 是否记得某件事）：
 - 识别标志：”你忘了吗””你还记得吗””你知道我的...””你记不记得””我跟你说过”等
 - 隐含意图是查询该事实本身，history_query 应提取目标事实的语义，而非保留问句形式
 - 记忆库中 profile 条目是纯事实陈述（如”用户佩戴 Fitbit Inspire 3”），event 条目带时间戳；query 需贴近这种陈述语义才能命中

@@ -9,7 +9,7 @@
 **akashic-agent** 是一个 **多频道（Telegram / QQ）、带长期记忆、支持自主推送与后台闲时任务、支持插件扩展的个人 AI Agent 框架**。
 
 核心能力：
-- 被动回复：接收用户消息，经过 6 阶段生命周期管道，产生回复
+- 被动回复：接收用户消息，经过 5 阶段生命周期管道，产生回复
 - 主动推送：定时拉取外部信息源，Agent 自主决定是否推送
 - Drift 闲时任务：没有推送内容时，Agent 利用空闲时间自主执行 skill 任务
 - 插件系统：声明式注册 tool / lifecycle hook / pre-hook 拦截
@@ -171,19 +171,27 @@ result = await client.call("read_file", {"path": "/tmp/note.txt"})
 
 ### 3.4 生命周期管道（Lifecycle Phase Pipeline）
 
-**是什么**：把每条消息的处理拆分为 6 个标准阶段，每个阶段内部是一条模块链。所有模块（内置 + 插件）在链上是平等节点。
+**是什么**：把每条消息的处理拆分为 5 个顶层阶段，每个阶段内部是一条模块链。所有模块（内置 + 插件）在链上是平等节点。
 
 **在本项目中的实现**：`Phase[I, O, F]` + `PhaseModule[F]`（`agent/lifecycle/phase.py`）
 
 ```
-InboundMessage
-  → BeforeTurn        session 获取 → 记忆检索 → EventBus emit → 插件介入
-  → BeforeReasoning   工具同步 → 构建上下文 → EventBus emit → prompt 预热
-  → Reasoner.run_turn()  (ReAct loop，内含 BeforeStep / AfterStep)
-  → AfterReasoning    解析回复 → 持久化 → 构建出站消息
-  → AfterTurn         TurnCommitted fanout → dispatch
-  → OutboundMessage
+InboundMessage（输入数据，不是 Phase）
+  → [Phase 1] BeforeTurn          session 获取 → 记忆检索 → EventBus emit → 插件介入
+  → [Phase 2] BeforeReasoning     工具同步 → 构建上下文 → EventBus emit → prompt 预热
+  → [Phase 3] Reasoner.run_turn()  ReAct loop
+                ├─ BeforeStep（每轮迭代前：token 估算 + 提示注入）
+                ├─ LLM 推理 + 工具执行
+                └─ AfterStep（每轮迭代后：fanout 通知）
+  → [Phase 4] AfterReasoning      解析回复 → 持久化 → 构建出站消息
+  → [Phase 5] AfterTurn           TurnCommitted fanout → dispatch
+  → OutboundMessage（输出数据，不是 Phase）
 ```
+
+**关键澄清**：
+- **顶层 Phase 是 5 个**，不是 6 个。`InboundMessage` 和 `OutboundMessage` 是管道处理的数据载体（`Phase[I, O, F]` 中的 I 和 O），不是 Phase
+- **BeforeStep / AfterStep** 是内嵌在 `Reasoner.run_turn()` 里的子步骤，用同样的 `PhaseModule` 协议实现，但和顶层 Phase 是层级关系，不应并列数进去
+- 完整链路：`InboundMessage → [5 个 Phase 的模块链] → OutboundMessage`
 
 **核心抽象三件套**：
 
@@ -574,7 +582,7 @@ async def _push(delta: StreamDelta):
 
 ### 第一阶段：理解 Agent 基础（1-2 天）
 1. 阅读 `main.py` 理解启动流程和数据流
-2. 阅读 `agent/core/passive_turn.py` 理解 6 阶段生命周期
+2. 阅读 `agent/core/passive_turn.py` 理解 5 阶段生命周期管道
 3. 阅读 `agent/lifecycle/phase.py` 理解 Phase 抽象
 4. 运行起来，发一条消息，跟随日志走通完整流程
 
@@ -602,7 +610,7 @@ async def _push(delta: StreamDelta):
 ## 六、高频面试问题速答
 
 **Q: 你们的 Agent 是怎么工作的？**
-> 三条链路。被动回复走 6 阶段生命周期管道，核心是 ReAct 循环（LLM 推理 + 工具调用迭代）。主动推送走定时 tick，DataGateway 先并行预取数据源，Agent 自主决策是否推送。Drift 模式在没有推送内容时利用空闲时间自主执行 skill 任务。
+> 三条链路。被动回复走 5 阶段生命周期管道（BeforeTurn → BeforeReasoning → Reasoner 含内部 BeforeStep/AfterStep → AfterReasoning → AfterTurn），核心是 ReAct 循环（LLM 推理 + 工具调用迭代）。主动推送走定时 tick，DataGateway 先并行预取数据源，Agent 自主决策是否推送。Drift 模式在没有推送内容时利用空闲时间自主执行 skill 任务。
 
 **Q: 工具系统是怎么设计的？**
 > 工具按来源分 builtin/MCP/plugin 三类，统一注册到 ToolRegistry。采用 deferred loading——非 always-on 工具不暴露 schema，模型通过 tool_search 按需检索加载。工具执行走 ToolExecutor 的 pre/post hook 链，插件可拦截改参。
