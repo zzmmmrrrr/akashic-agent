@@ -15,7 +15,7 @@ class GateDecision:
 
 
 class QueryRewriter:
-    """轻量级记忆检索 Gate，使用独立小模型（如 Qwen-Flash）做查询改写与检索决策。
+    """轻量级记忆检索 Gate，使用独立小模型（如 Mimo-Flash/Qwen-flash）做查询改写与检索决策。
 
     五层处理全部通过 _build_prompt 注入给 LLM，由 LLM 一次性完成推理并输出 XML，
     代码侧只负责构造 prompt、调用 LLM、解析 XML。五层在 prompt 中的位置：
