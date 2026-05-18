@@ -277,7 +277,7 @@ class PassiveTurnPipeline:
                     ),
                 )
 
-            # Phase 3-4: Reasoning（BeforeStep/AfterStep 模块链在 Reasoner 内部执行）。
+            # Phase 3: Reasoning（BeforeStep/AfterStep 模块链在 Reasoner 内部执行）。
             session = state.session
             if session is None:
                 raise RuntimeError("Passive turn requires TurnState.session")
@@ -300,12 +300,12 @@ class PassiveTurnPipeline:
                 ),
             )
 
-        # Phase 5: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
+        # Phase 4: AfterReasoning 模块链（parse、AfterReasoning 事件、持久化、出站消息）。
         after_reasoning = await self._after_reasoning.run(
             AfterReasoningInput(state=state, turn_result=turn_result)
         )
 
-        # Phase 6: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
+        # Phase 5: AfterTurn 模块链（TurnCommitted fanout、AfterTurn fanout、dispatch）。
         return await self._after_turn.run(
             TurnSnapshot(
                 state=state,
